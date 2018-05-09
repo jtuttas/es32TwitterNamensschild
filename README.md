@@ -1,6 +1,6 @@
 # ESP32 Interaktives Namensschild mit Twitter Integration
 Das Namensschild ist konfigurierbar über eine JSON Datei, die der ESP32 zuvor von einem Server lädt.
-```json
+```js
 {
   "event":"MMBbS Hackaton",
   "subject":"mmbbs/hack",
