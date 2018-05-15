@@ -20,6 +20,7 @@
 // BUSY -> 7, RST -> 9, DC -> 8, CS-> 10, CLK -> 13, DIN -> 11
 #include <Arduino.h>
 #include <PubSubClient.h>
+#include "esp_wpa2.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <GxEPD.h>
@@ -41,7 +42,14 @@ float tempC = 0;
 GxIO_Class io(SPI, SS, 22, 21);
 GxEPD_Class display(io, 16, 4);
 
-const char *ssid = "FRITZ!Box Fon WLAN 7390";
+// TODO: Hier WLAN Zugangsdaten anpassen
+#define EAP_ID "tuttas"
+#define EAP_USERNAME "tuttas"
+#define EAP_PASSWORD "geheim"
+
+static const char* ssid = "MMBBS-Intern";
+//const char *ssid = "FRITZ!Box Fon WLAN 7390";
+static const char* username = "tuttas";
 const char *password = "geheim";
 const char *mqtt_server = "service.joerg-tuttas.de";
 String web_serverconfig = "http://service.joerg-tuttas.de/eink.json";
@@ -164,7 +172,21 @@ void setup()
     display.drawExampleBitmap(gImage_splash, 0, 0, 128, 296, GxEPD_BLACK);
     display.update();
     Serial.write("\r\nConnect to WLAN");
-    WiFi.begin(ssid, password);
+
+     // TODO: WPA2 enterprise magic starts here
+   
+    WiFi.disconnect(true);      
+    esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)EAP_ID, strlen(EAP_ID));
+    esp_wifi_sta_wpa2_ent_set_username((uint8_t *)EAP_USERNAME, strlen(EAP_USERNAME));
+    esp_wifi_sta_wpa2_ent_set_password((uint8_t *)EAP_PASSWORD, strlen(EAP_PASSWORD));
+    esp_wpa2_config_t config = WPA2_CONFIG_INIT_DEFAULT(); 
+    esp_wifi_sta_wpa2_ent_enable(&config);
+    WiFi.begin(ssid);
+    // WPA2 enterprise magic ends here
+
+    // TODO: Normale WLAN Verbindung
+    //WiFi.begin(ssid, password);
+
     Serial.println();
     Serial.println("Waiting for connection and IP Address from DHCP");
     while (WiFi.status() != WL_CONNECTED)

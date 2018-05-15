@@ -11,6 +11,7 @@ access_token = ""
 access_token_secret = ""
 consumer_key = ""
 consumer_secret = ""
+# TODO: Hashtag und Topic hier anpassen
 hashtag="#mmbbshack"
 topic="mmbbs/hack"
 msg=""
@@ -25,8 +26,6 @@ def on_connect(client, userdata, flags, rc):
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
     print(msg.topic+" "+str(msg.payload))
-
-
 
 # Blocking call that processes network traffic, dispatches callbacks and
 # handles reconnecting.
