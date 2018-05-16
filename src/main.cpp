@@ -33,7 +33,8 @@
 #include <BitmapGraphics.h>
 #include <ArduinoJson.h>
 
-float tempC = 0;
+#define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds / \ \ \ \
+#define TIME_TO_SLEEP 30 / Time ESP32 will go to sleep (in seconds) */
 
 //GxIO_Class io(SPI, SS, 0, 2); // arbitrary selection of D3(=0), D4(=2), selected for default of GxEPD_Class
 // GxGDEP015OC1(GxIO& io, uint8_t rst = 2, uint8_t busy = 4);
@@ -47,22 +48,25 @@ GxEPD_Class display(io, 16, 4);
 #define EAP_USERNAME "tuttas"
 #define EAP_PASSWORD "geheim"
 
-static const char* ssid = "MMBBS-Intern";
-//const char *ssid = "FRITZ!Box Fon WLAN 7390";
-static const char* username = "tuttas";
+//static const char* ssid = "MMBBS-Intern";
+const char *ssid = "FRITZ!Box Fon WLAN 7390";
+static const char *username = "tuttas";
 const char *password = "geheim";
 const char *mqtt_server = "service.joerg-tuttas.de";
 String web_serverconfig = "http://service.joerg-tuttas.de/eink.json";
 WiFiClient espClient;
 PubSubClient client(espClient);
-String event;
-String member;
-String subject;
-String teilnehmer[100];
+RTC_RODATA_ATTR char json[1023];
 const int BUTTON_PIN = 0;
-int currentName=0;
-int numerOfMembers=0;
+RTC_DATA_ATTR int currentName = 0;
+RTC_DATA_ATTR int numerOfMembers = 0;
+RTC_DATA_ATTR int bootCount = 0;
 const char *e;
+static const uint8_t LED_BUILTIN = 2;
+String event;
+String subject;
+String member;
+String teilnehmer[10];
 
 void showPartialMemberUpdate()
 {
@@ -72,7 +76,7 @@ void showPartialMemberUpdate()
     uint16_t box_x = 102;
     uint16_t box_y = 0;
     uint16_t box_w = 193;
-    uint16_t box_h = 76;
+    uint16_t box_h = 70;
     uint16_t cursor_y = box_y + 10;
 
     display.setRotation(135);
@@ -80,9 +84,9 @@ void showPartialMemberUpdate()
     display.setTextColor(GxEPD_BLACK);
 
     display.fillRect(box_x, box_y, box_w, box_h, GxEPD_WHITE);
-    display.setCursor(box_x, cursor_y+20);
+    display.setCursor(box_x, cursor_y + 20);
     display.print(event);
-    display.setCursor(box_x, cursor_y+50);
+    display.setCursor(box_x, cursor_y + 50);
     display.print(member);
     display.updateWindow(box_x, box_y, box_w, box_h, true);
 }
@@ -104,12 +108,12 @@ void showPartialTwitterUpdate(String msg, String from)
 
     display.fillRect(box_x, box_y, box_w, box_h, GxEPD_WHITE);
     display.setCursor(box_x, cursor_y);
-    display.print(msg.substring(0,21));
-    display.setCursor(box_x, cursor_y+14);
-    display.print(msg.substring(21,42));
-    display.setCursor(box_x, cursor_y+28);
+    display.print(msg.substring(0, 21));
+    display.setCursor(box_x, cursor_y + 14);
+    display.print(msg.substring(21, 42));
+    display.setCursor(box_x, cursor_y + 28);
     display.print(msg.substring(42));
-    
+
     display.updateWindow(box_x, box_y, box_w, box_h, true);
 }
 
@@ -127,7 +131,7 @@ void callback(char *topic, byte *payload, unsigned int length)
     JsonObject &root = jsonBuffer.parseObject(payload);
     String msg = root["text"];
     String from = root["username"];
-    showPartialTwitterUpdate(msg,from);
+    showPartialTwitterUpdate(msg, from);
 }
 
 void reconnect()
@@ -141,9 +145,9 @@ void reconnect()
         clientId += String(random(0xffff), HEX);
         // Attempt to connect
         if (client.connect(clientId.c_str()))
-        {           
-            const char* t;
-            t=subject.c_str();
+        {
+            const char *t;
+            t = subject.c_str();
             client.subscribe(t);
             Serial.print("connected and subscribe to:");
             // ... and resubscribe
@@ -160,21 +164,52 @@ void reconnect()
     }
 }
 
+void readFromJson(String payload)
+{
+    StaticJsonBuffer<1023> jsonBuffer;
+    JsonObject &root = jsonBuffer.parseObject(payload);
+    String s = root["event"];
+    event = s;
+    Serial.print("event gelesen:");
+    Serial.println(event);
+
+    String s2 = root["subject"];
+    subject = s2;
+    Serial.print("subject gelesen:");
+    Serial.println(subject);
+
+    JsonArray &myArray = root["members"];
+    numerOfMembers = myArray.size();
+    for (int i = 0; i < numerOfMembers; i++)
+    {
+        String t = root["members"][i];
+        teilnehmer[i] = t;
+        Serial.print("Member:");
+        Serial.println(t);
+    }
+    member = teilnehmer[currentName];
+}
+
 void setup()
 {
 
     Serial.begin(115200);
     delay(500);
     pinMode(BUTTON_PIN, INPUT_PULLUP);
+    pinMode(LED_BUILTIN, OUTPUT);
+    digitalWrite(LED_BUILTIN, LOW);
     Serial.println("setup");
+    //Increment boot number and print it every reboot
+    ++bootCount;
+    Serial.println("Boot number: " + String(bootCount));
     display.init();
     Serial.println("display Init");
-    display.drawExampleBitmap(gImage_splash, 0, 0, 128, 296, GxEPD_BLACK);
-    display.update();
+    //display.drawExampleBitmap(gImage_splash, 0, 0, 128, 296, GxEPD_BLACK);
+    //display.update();
     Serial.write("\r\nConnect to WLAN");
 
-     // TODO: WPA2 enterprise magic starts here
-   
+    // TODO: WPA2 enterprise magic starts here
+    /*
     WiFi.disconnect(true);      
     esp_wifi_sta_wpa2_ent_set_identity((uint8_t *)EAP_ID, strlen(EAP_ID));
     esp_wifi_sta_wpa2_ent_set_username((uint8_t *)EAP_USERNAME, strlen(EAP_USERNAME));
@@ -182,90 +217,119 @@ void setup()
     esp_wpa2_config_t config = WPA2_CONFIG_INIT_DEFAULT(); 
     esp_wifi_sta_wpa2_ent_enable(&config);
     WiFi.begin(ssid);
+    */
     // WPA2 enterprise magic ends here
 
     // TODO: Normale WLAN Verbindung
-    //WiFi.begin(ssid, password);
+    WiFi.begin(ssid, password);
 
     Serial.println();
     Serial.println("Waiting for connection and IP Address from DHCP");
-    while (WiFi.status() != WL_CONNECTED)
+    int count = 0;
+    while (WiFi.status() != WL_CONNECTED && count <= 20)
     {
-        delay(2000);
+        delay(1000);
         Serial.print(".");
+        if (count % 2 == 0)
+        {
+            digitalWrite(LED_BUILTIN, LOW);
+        }
+        else
+        {
+            digitalWrite(LED_BUILTIN, HIGH);
+        }
+        count++;
+        if (count == 20)
+        {
+            Serial.println("Can't connect to WLAN, go to sleep!");
+            if (bootCount == 1)
+            {
+                bootCount = 0;
+            }
+            esp_sleep_enable_timer_wakeup(5 * uS_TO_S_FACTOR);
+            esp_deep_sleep_start();
+        }
     }
     client.setServer(mqtt_server, 1883);
     client.setCallback(callback);
+    digitalWrite(LED_BUILTIN, HIGH);
 
-    display.drawExampleBitmap(gImage_gui, 0, 0, 128, 296, GxEPD_BLACK);
-    display.update();
+    if (bootCount == 1)
+    {
+        display.drawExampleBitmap(gImage_gui, sizeof(gImage_gui), GxEPD::bm_default | GxEPD::bm_partial_update);
+        display.drawExampleBitmap(gImage_gui, 0, 0, 128, 296, GxEPD_BLACK);
+        display.update();
+        Serial.println("Rebuild Image");
 
-    display.drawExampleBitmap(gImage_gui, sizeof(gImage_gui), GxEPD::bm_default | GxEPD::bm_partial_update);
+        // Laden der Konfiguration vom Server
+        HTTPClient http;
+        http.begin(web_serverconfig); //Specify the URL
+        int httpCode = http.GET();    //Make the request
 
-    // Laden der Konfiguration vom Server
-    HTTPClient http;
-    http.begin(web_serverconfig); //Specify the URL
-    int httpCode = http.GET();    //Make the request
+        if (httpCode > 0)
+        { //Check for the returning code
 
-    if (httpCode > 0)
-    { //Check for the returning code
+            String payload = http.getString();
+            Serial.println(httpCode);
+            Serial.println(payload);
+            payload.toCharArray(json, payload.length() + 1);
 
-        String payload = http.getString();
-        Serial.println(httpCode);
-        Serial.println(payload);
-        StaticJsonBuffer<200> jsonBuffer;
-        JsonObject &root = jsonBuffer.parseObject(payload);
-        String s = root["event"];  
-        event = s;
-        Serial.print("event gelesen:");
-        Serial.println(event);
-
-        String s2 = root["subject"];
-        subject = s2;
-        Serial.print("subject gelesen:");
-        Serial.println(subject);
-
-        JsonArray& myArray = root["members"];
-        numerOfMembers=myArray.size();
-        for (int i=0;i<numerOfMembers;i++) {
-            String t = root["members"][i];
-            teilnehmer[i]=t;
+            readFromJson(payload);
         }
-        member = teilnehmer[0];
-        Serial.print("members gelesen:");
-        Serial.println(member);
-    }
 
+        else
+        {
+            event = "undefined";
+            subject = "undefined";
+            member = "N.N.";
+            Serial.println("Error on HTTP request");
+        }
+        showPartialMemberUpdate();
+    }
     else
     {
-        event = "undefined";
-        subject="undefined";
-        member = "N.N.";
-        Serial.println("Error on HTTP request");
+        Serial.println("Habe Daten:");
+        Serial.println(json);
+
+        readFromJson(String(json));
     }
-    showPartialMemberUpdate();
+
+    int loops = 10;
+    if (bootCount == 1)
+    {
+        loops = 100;
+    }
+
+    for (int i = 0; i < loops; i++)
+    {
+        if (digitalRead(BUTTON_PIN) == LOW)
+        { // Check if button has been pressed
+            while (digitalRead(BUTTON_PIN) == LOW)
+                ; // Wait for button to be released
+            Serial.println("Change Name");
+            currentName++;
+            if (currentName >= numerOfMembers)
+            {
+                currentName = 0;
+            }
+            member = teilnehmer[currentName];
+            Serial.print("members gelesen:");
+            Serial.println(member);
+            showPartialMemberUpdate();
+        }
+        if (!client.connected())
+        {
+            reconnect();
+        }
+        client.loop();
+        delay(100);
+    }
+    Serial.println("go to sleep");
+    digitalWrite(LED_BUILTIN, HIGH);
+    esp_sleep_enable_timer_wakeup(60 * uS_TO_S_FACTOR);
+    esp_deep_sleep_start();
 }
 
 void loop()
 {
-    if (!client.connected())
-    {
-        reconnect();
-    }
-    
-    if (digitalRead(BUTTON_PIN) == LOW)
-    { // Check if button has been pressed
-        while (digitalRead(BUTTON_PIN) == LOW); // Wait for button to be released
-        Serial.println("Change Name");
-        currentName++;
-        if (currentName>=numerOfMembers) {
-            currentName=0;
-        }
-        member = teilnehmer[currentName];
-        Serial.print("members gelesen:");
-        Serial.println(member);
-        showPartialMemberUpdate();
-    }
-    
-    client.loop();
 }
