@@ -32,6 +32,8 @@
 #include <Fonts/FreeMono9pt7b.h>
 #include <BitmapGraphics.h>
 #include <ArduinoJson.h>
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
 
 #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds / \ \ \ \
 #define TIME_TO_SLEEP 30 / Time ESP32 will go to sleep (in seconds) */
@@ -192,7 +194,7 @@ void readFromJson(String payload)
 
 void setup()
 {
-
+    WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
     Serial.begin(115200);
     delay(500);
     pinMode(BUTTON_PIN, INPUT_PULLUP);
