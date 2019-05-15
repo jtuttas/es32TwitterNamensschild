@@ -26,5 +26,8 @@ DIN | D23
 GND | GND 
 3.3V | 3.3V 
 
+# Ablauf
+![sequenz](sequenz.png) 
+
 ## Video
 [![ESP32 E-Ink Namensschild](http://img.youtube.com/vi/-tE8FJc4dC4/0.jpg)](http://www.youtube.com/watch?v=-tE8FJc4dC4)
